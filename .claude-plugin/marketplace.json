@@ -1,0 +1,12 @@
+{
+  "name": "flip-flow",
+  "owner": { "name": "FlipFlow", "url": "https://cleo.flipflow.app" },
+  "plugins": [
+    {
+      "name": "cleo",
+      "displayName": "Cleo Security",
+      "description": "Security scanning for local code + localhost apps, from Claude. Powered by Cleo.",
+      "source": "./"
+    }
+  ]
+}
