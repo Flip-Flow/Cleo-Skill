@@ -49,6 +49,17 @@ function openBrowser(url) {
   const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
   try { spawn(cmd, args, { stdio: 'ignore', detached: true }).unref(); } catch { /* user opens it manually */ }
 }
+
+// Only auto-open a sign-in URL we recognise: https on a flipflow.app host, or
+// http on localhost/127.0.0.1 for local dev. Guards against a tampered server
+// response handing the browser an arbitrary (e.g. phishing) URL.
+function isTrustedVerifyUrl(url) {
+  let u; try { u = new URL(url); } catch { return false; }
+  const h = u.hostname.toLowerCase();
+  if (u.protocol === 'https:' && (h === 'flipflow.app' || h.endsWith('.flipflow.app'))) return true;
+  if (u.protocol === 'http:'  && (h === 'localhost' || h === '127.0.0.1')) return true;
+  return false;
+}
 function die(msg) { console.error(msg); process.exit(1); }
 function out(obj) { console.log(JSON.stringify(obj, null, 2)); }
 function tokenOrDie() {
@@ -112,11 +123,17 @@ async function cmdLogin(args) {
   if (!start.res.ok) die(`Could not start sign in: ${start.json?.error ?? start.res.status}`);
   const { deviceCode, userCode, verifyUrl, interval = 5, expiresIn = 600 } = start.json;
 
+  // Only auto-open a verifyUrl we trust: https on a flipflow.app host (or http on
+  // localhost for dev). Anything else is printed for the user to open manually,
+  // so a tampered/MITM'd response can't hand the browser an arbitrary URL.
+  const safeVerifyUrl = isTrustedVerifyUrl(verifyUrl);
+
   console.error('\n  Sign in to Cleo to connect this computer:\n');
-  console.error(`    Opening:       ${verifyUrl}`);
+  console.error(`    ${safeVerifyUrl ? 'Opening' : 'Open'}:       ${verifyUrl}`);
   console.error(`    Confirm code:  ${userCode}`);
   console.error('    Then approve with your MFA. Waiting...\n');
-  openBrowser(verifyUrl);
+  if (safeVerifyUrl) openBrowser(verifyUrl);
+  else console.error('    (Open the link above manually - it is not a recognised Cleo URL.)\n');
 
   const deadline = Date.now() + expiresIn * 1000;
   while (Date.now() < deadline) {
@@ -201,9 +218,57 @@ async function cmdHar(args) {
   out(await api('/v1/har', { method: 'POST', body: { content }, timeoutMs: 540000 }));
 }
 
+// Parse an IPv4 literal in any of the forms a browser/curl accepts (dotted
+// decimal, dotted octal/hex, or a single 32-bit decimal/octal/hex number) into a
+// 32-bit integer, or null if it is not an IPv4 literal. Used so obfuscated
+// loopback/private addresses (e.g. 0177.0.0.1, 2130706433, 0x7f000001) are still
+// recognised as private and never shipped to the server-side probe.
+function ipv4ToInt(host) {
+  const parts = host.split('.');
+  if (parts.length === 0 || parts.length > 4) return null;
+  const nums = [];
+  for (const p of parts) {
+    if (p === '') return null;
+    let n;
+    if (/^0x[0-9a-f]+$/i.test(p))      n = parseInt(p, 16);
+    else if (/^0[0-7]+$/.test(p))      n = parseInt(p, 8);
+    else if (/^[0-9]+$/.test(p))       n = parseInt(p, 10);
+    else return null;
+    if (!Number.isFinite(n)) return null;
+    nums.push(n);
+  }
+  // Last part absorbs the remaining bytes (inet_aton semantics).
+  const last = nums.pop();
+  const maxLast = Math.pow(256, 4 - nums.length);
+  if (last >= maxLast) return null;
+  for (const n of nums) if (n > 255) return null;
+  let int = last >>> 0;
+  for (let i = 0; i < nums.length; i++) int += nums[i] * Math.pow(256, 3 - i);
+  return int >>> 0;
+}
+
 function isPrivateHost(host) {
-  return /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(host)
-    || host === '::1' || host === '[::1]' || host.endsWith('.local');
+  if (!host) return false;
+  let h = host.toLowerCase().replace(/^\[|\]$/g, '');  // strip IPv6 brackets
+
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')) return true;
+
+  // IPv6: loopback, unique-local (fc00::/7), link-local (fe80::/10); IPv4-mapped
+  // (::ffff:a.b.c.d) is reduced to its IPv4 tail below.
+  if (h === '::1' || h === '::' || /^f[cd][0-9a-f]{2}:/.test(h) || /^fe[89ab][0-9a-f]:/.test(h)) return true;
+  const mapped = h.match(/^::ffff:(\d+\.\d+\.\d+\.\d+|[0-9a-f.]+)$/i);
+  if (mapped) h = mapped[1];
+
+  const int = ipv4ToInt(h);
+  if (int === null) return false;
+  const a = (int >>> 24) & 0xff, b = (int >>> 16) & 0xff;
+  return a === 127                                   // 127.0.0.0/8 loopback
+      || a === 10                                    // 10.0.0.0/8
+      || a === 0                                     // 0.0.0.0/8 ("this network")
+      || (a === 192 && b === 168)                    // 192.168.0.0/16
+      || (a === 169 && b === 254)                    // 169.254.0.0/16 link-local + cloud metadata
+      || (a === 172 && b >= 16 && b <= 31)           // 172.16.0.0/12
+      || (a === 100 && b >= 64 && b <= 127);         // 100.64.0.0/10 CGNAT
 }
 
 // Server-side (gated, Pro+): AI security scan of a URL/domain. Localhost / private
