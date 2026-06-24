@@ -239,7 +239,7 @@ const SKIP_DIRS  = new Set([
   'test-results', 'playwright-report', 'cypress', '.test', 'output', 'snapshots',
   'tmp', 'temp', 'logs',
   // Generated / non-source artifact trees.
-  'graphify-out', '.obsidian', 'my-vault',
+  'graphify-out', '.obsidian', 'my-vault', '.playwright-mcp',
 ]);
 const CODE_EXT   = new Set(['.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs', '.py', '.rb', '.php', '.go', '.java', '.rs', '.c', '.cc', '.cpp', '.h', '.hpp', '.cs', '.sql', '.sh', '.yml', '.yaml', '.vue', '.svelte', '.kt', '.swift']);
 // Junk / generated / lock files: skip - no security value, just burns tokens.
