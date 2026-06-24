@@ -34,10 +34,11 @@ couple of minutes on larger inputs, and the default timeout may cut them off.
 
 ## Output
 
-`code` and `scan` return JSON: `{ kind, grade A-F, score, summary, tips[], findings[{severity,title,detail,fix,line,cwe}], cached }`.
+`code` and `scan` return JSON: `{ kind, grade A-F, score, summary, tips[], findings[{severity,title,detail,fix,line,cwe}], cached, coverage?{audited,total,complete} }`.
 
 After running:
 - For `code` / `scan`: lead with the **grade**, then the top **findings** (severity, title, fix), then the **tips**. Offer to apply the fixes to the user's files.
+- Partial coverage: if the result has `coverage.complete: false` (or the summary starts with `[PARTIAL SCAN]`), tell the user up front that only part of the codebase was audited (`coverage.audited` of `coverage.total` chunks) and that `/cleo code <path> --all` runs a full scan. Do not present a partial grade as the whole-repo grade.
 - `login` prints a URL + short code on stderr - surface them so the user can approve in the browser; it waits and confirms when connected.
 - `[401]` or "Not signed in" -> tell the user to run `/cleo login`.
 - `[402]` / `[429]` -> relay the message + upgrade URL; do not retry or work around it.
