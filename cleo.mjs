@@ -277,8 +277,9 @@ function collectFiles(root) {
 
 // Server-side (gated, Pro+): AI security review of local source code.
 async function cmdCode(args) {
-  const path = args[0];
-  if (!path) die('Usage: code <file-or-directory>');
+  const all  = args.includes('--all');           // scan the whole repo, not the default scope cap
+  const path = args.find(a => !a.startsWith('--'));
+  if (!path) die('Usage: code <file-or-directory> [--all]');
   let st; try { st = statSync(path); } catch (e) { die(`Cannot read ${path}: ${e.message}`); }
 
   let filename, code;
@@ -295,9 +296,10 @@ async function cmdCode(args) {
   // The server returns the report inline for small inputs, or a 202 job for a
   // large repo (audited in the background to dodge request-timeout limits). For
   // the async case, poll the job until it finishes.
-  const first = await api('/v1/code', { method: 'POST', body: { filename, code }, timeoutMs: 120000 });
+  const first = await api('/v1/code', { method: 'POST', body: { filename, code, all }, timeoutMs: 120000 });
   if (first?.status === 'running' && first.jobId) {
-    console.error(`\n  Deep scan: auditing ${first.totalChunks} code chunk(s) in the background${first.dropped ? ` (${first.dropped} skipped: over the daily budget)` : ''}.`);
+    console.error(`\n  Deep scan: auditing ${first.totalChunks} code chunk(s) in the background.`);
+    if (first.dropped) console.error(`  ${first.dropped} chunk(s) skipped${all ? ' (daily budget)' : ' - pass --all to scan the whole repo'}.`);
     console.error('  This can take a few minutes for a large repo. Waiting...\n');
     out(await pollCodeJob(first.jobId));
     return;

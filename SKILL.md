@@ -26,7 +26,7 @@ couple of minutes on larger inputs, and the default timeout may cut them off.
 | `login` | free | Browser sign in to Cleo (opens a page, approve this computer with MFA). Run first. |
 | `logout` | free | Sign out on this computer |
 | `entitlements` | free | Show the plan, features, limits, usage |
-| `code <path>` | gated (Pro+) | AI security review of local source (file or directory) |
+| `code <path> [--all]` | gated (Pro+) | AI security review of local source (file or directory). A large repo is scoped to a cost-sane default; pass `--all` to audit everything (uses more of the daily budget). |
 | `scan <target>` | gated (Pro+) | AI security scan of a URL/domain incl. `http://localhost:3000` |
 | `har <file.har>` | gated (any plan) | Analyse a HAR capture |
 | `jwt <token>` | local, free | Decode + check a JWT |
