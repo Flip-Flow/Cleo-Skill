@@ -2,7 +2,7 @@
   "name": "cleo",
   "displayName": "Cleo Security",
   "description": "Scan local code and localhost apps for security issues, decode JWTs, lint security headers, and map HAR auth flows. Powered by Cleo (cleo.flipflow.app).",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": { "name": "FlipFlow" },
   "homepage": "https://cleo.flipflow.app",
   "repository": "https://github.com/Flip-Flow/Cleo-Skill",

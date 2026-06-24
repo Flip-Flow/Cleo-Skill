@@ -230,11 +230,25 @@ async function cmdScan(args) {
 
 // Local source collection for code scan. Skips heavy/vendor dirs + binaries +
 // secret files; caps per-file and total size.
-const SKIP_DIRS  = new Set(['node_modules', '.git', 'dist', 'build', '.next', 'out', 'coverage', 'vendor', '__pycache__', '.venv', 'venv', 'target', '.cache']);
-const CODE_EXT   = new Set(['.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs', '.py', '.rb', '.php', '.go', '.java', '.rs', '.c', '.cc', '.cpp', '.h', '.hpp', '.cs', '.sql', '.sh', '.yml', '.yaml', '.html', '.vue', '.svelte', '.kt', '.swift']);
+const SKIP_DIRS  = new Set([
+  'node_modules', '.git', 'dist', 'build', '.next', 'out', 'coverage', 'vendor',
+  '__pycache__', '.venv', 'venv', 'target', '.cache',
+  // Test / generated / capture output: no production attack surface, just burns
+  // the scan budget on snapshots and fixtures instead of real source.
+  'test', 'tests', '__tests__', '__snapshots__', 'e2e', 'fixtures', 'mocks', '__mocks__',
+  'test-results', 'playwright-report', 'cypress', '.test', 'output', 'snapshots',
+  'tmp', 'temp', 'logs',
+]);
+const CODE_EXT   = new Set(['.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs', '.py', '.rb', '.php', '.go', '.java', '.rs', '.c', '.cc', '.cpp', '.h', '.hpp', '.cs', '.sql', '.sh', '.yml', '.yaml', '.vue', '.svelte', '.kt', '.swift']);
 // Junk / generated / lock files: skip - no security value, just burns tokens.
 const SKIP_FILES = new Set(['package-lock.json', 'yarn.lock', 'pnpm-lock.yaml', 'composer.lock', 'Gemfile.lock', 'poetry.lock', 'Cargo.lock']);
-const isJunk = (name) => SKIP_FILES.has(name) || /\.(min\.js|min\.css|map|lock)$/i.test(name) || name.startsWith('.env');
+// Test, spec, snapshot and declaration files carry no production attack surface.
+const isJunk = (name) =>
+  SKIP_FILES.has(name) ||
+  /\.(min\.js|min\.css|map|lock|snap)$/i.test(name) ||
+  /\.(test|spec)\.[cm]?[jt]sx?$/i.test(name) ||
+  /\.d\.ts$/i.test(name) ||
+  name.startsWith('.env');
 const PER_FILE_CAP = 1 * 1024 * 1024;     // 1 MB per file
 const TOTAL_CAP    = 4 * 1024 * 1024;     // CLI-side guard; server enforces the per-tier limit
 
