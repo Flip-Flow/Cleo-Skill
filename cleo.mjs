@@ -238,6 +238,8 @@ const SKIP_DIRS  = new Set([
   'test', 'tests', '__tests__', '__snapshots__', 'e2e', 'fixtures', 'mocks', '__mocks__',
   'test-results', 'playwright-report', 'cypress', '.test', 'output', 'snapshots',
   'tmp', 'temp', 'logs',
+  // Generated / non-source artifact trees.
+  'graphify-out', '.obsidian', 'my-vault',
 ]);
 const CODE_EXT   = new Set(['.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs', '.py', '.rb', '.php', '.go', '.java', '.rs', '.c', '.cc', '.cpp', '.h', '.hpp', '.cs', '.sql', '.sh', '.yml', '.yaml', '.vue', '.svelte', '.kt', '.swift']);
 // Junk / generated / lock files: skip - no security value, just burns tokens.
@@ -289,7 +291,35 @@ async function cmdCode(args) {
     filename = basename(path);
     code = readFileSync(path, 'utf8').slice(0, TOTAL_CAP);
   }
-  out(await api('/v1/code', { method: 'POST', body: { filename, code }, timeoutMs: 540000 }));
+
+  // The server returns the report inline for small inputs, or a 202 job for a
+  // large repo (audited in the background to dodge request-timeout limits). For
+  // the async case, poll the job until it finishes.
+  const first = await api('/v1/code', { method: 'POST', body: { filename, code }, timeoutMs: 120000 });
+  if (first?.status === 'running' && first.jobId) {
+    console.error(`\n  Deep scan: auditing ${first.totalChunks} code chunk(s) in the background${first.dropped ? ` (${first.dropped} skipped: over the daily budget)` : ''}.`);
+    console.error('  This can take a few minutes for a large repo. Waiting...\n');
+    out(await pollCodeJob(first.jobId));
+    return;
+  }
+  out(first);
+}
+
+// Poll an async deep code-scan job until it completes (or errors / times out).
+async function pollCodeJob(jobId) {
+  const deadline = Date.now() + 30 * 60 * 1000; // 30 min hard cap
+  let lastDone = -1;
+  while (Date.now() < deadline) {
+    await sleep(4000);
+    const j = await api(`/v1/code/job/${jobId}`, { timeoutMs: 30000 });
+    if (j.status === 'done')  return j;
+    if (j.status === 'error') die(`[scan failed] ${j.error ?? 'unknown error'}`);
+    if (typeof j.done === 'number' && j.done !== lastDone) {
+      lastDone = j.done;
+      console.error(`  progress: ${j.done}/${j.total} chunks audited`);
+    }
+  }
+  die(`Scan did not finish within 30 minutes. Job id: ${jobId} (poll /v1/code/job/${jobId} later).`);
 }
 
 const [cmd, ...rest] = process.argv.slice(2);
